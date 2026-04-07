@@ -39,7 +39,10 @@ pub enum EventKind {
     SyncEnd {
         end_pc: u64,
     },
-    SyncPeriodic,
+    SyncPeriodic {
+        timestamp: u64,
+        pc: u64,
+    },
     BPHit {
         hit_count: u64,
     },
@@ -129,9 +132,15 @@ impl EventKind {
         EventKind::SyncEnd { end_pc }
     }
 
-    // pub fn sync_periodic() -> Self {
-    //     EventKind::SyncPeriodic
-    // }
+    pub fn sync_periodic(
+        pc: u64,
+        timestamp: u64, 
+    ) -> Self {
+        EventKind::SyncPeriodic {
+            pc, 
+            timestamp, 
+        }
+    }
 
     pub fn bphit(hit_count: u64) -> Self {
         EventKind::BPHit { hit_count }
@@ -237,7 +246,14 @@ impl std::fmt::Display for EventKind {
                 start_pc, start_prv, start_ctx, runtime_cfg
             ),
             EventKind::SyncEnd { end_pc } => write!(f, "SyncEnd: {:#x}", end_pc),
-            EventKind::SyncPeriodic => write!(f, "SyncPeriodic"),
+            EventKind::SyncPeriodic {
+                timestamp,
+                pc,
+            } => write!(
+                f,
+                "SyncPeriodic: {:#x} {:?}",
+                pc, timestamp
+            ),
             EventKind::BPHit { hit_count } => write!(f, "BPHit: {}", hit_count),
             EventKind::BPMiss => write!(f, "BPMiss"),
             EventKind::Panic => write!(f, "Panic"),
@@ -279,8 +295,8 @@ impl EventKind {
             EventKind::SyncEnd { end_pc } => {
                 format!("SYNC_END,0x0,{:#x}", end_pc)
             }
-            EventKind::SyncPeriodic => {
-                format!("SYNC_PERIODIC,0x0,0x0")
+            EventKind::SyncPeriodic {pc, timestamp} => { 
+                format!("SYNC_PERIODIC,{:#x},{:#x}", pc, timestamp)
             }
             // EventKind::BPHit { hit_count } => {
             //     format!("BPHIT,{}", hit_count)

@@ -14,6 +14,8 @@ use crate::frontend::br_mode::BrMode;
 use crate::frontend::decoder_cache::{BasicBlockStats, DecoderCache};
 use crate::frontend::f_header::FHeader;
 use crate::frontend::packet::{read_first_packet, Packet, PacketReader};
+use crate::frontend::packet::SubFunc3::{Sync};
+use crate::frontend::sync_type::SyncType;
 use crate::frontend::runtime_cfg::DecoderRuntimeCfg;
 use crate::frontend::trap_type::TrapType;
 
@@ -254,20 +256,50 @@ pub fn decode_trace(
         // Select the correct instruction map based on privilege and context
         let get_insn_map = |p: Prv, ctx: u64| -> &FxHashMap<u64, Insn> { insn_index.get(p, ctx) };
         let mut curr_insn_map = get_insn_map(prv, ctx);
-
+        
         if packet.f_header == FHeader::FSync {
-            let new_pc = step_bb_until(
-                pc.get_addr(),
-                curr_insn_map,
-                refund_addr(packet.target_address),
-                &mut bus,
-                &mut insn_count,
-            );
-            pc.set_addr(new_pc);
-            bus.broadcast(Entry::event(
-                EventKind::sync_end(pc.get_addr()),
-                packet.timestamp,
-            ));
+            let sync_type = match packet.func3 {
+                crate::frontend::packet::SubFunc3::Sync(t) => t,
+                _ => panic!("Expected SyncType for FSync packet"),
+            };
+            match sync_type {
+                SyncType::SyncStart => {
+                    pc.set_addr(refund_addr(packet.target_address));
+                    timestamp = packet.timestamp;
+
+                    bus.broadcast(Entry::event(
+                        EventKind::sync_start(runtime_cfg.clone(), pc.get_addr(), prv, ctx),
+                        timestamp,
+                    ));
+                    continue;
+                } 
+                SyncType::SyncPeriodic => {
+                    timestamp = packet.timestamp;
+                    bus.broadcast(Entry::event(
+                        EventKind::sync_periodic(pc.get_addr(),
+                        packet.timestamp,), packet.timestamp,
+                    ));
+                    continue;
+                }
+                SyncType::SyncEnd => {
+                    let new_pc = step_bb_until(
+                    pc.get_addr(),
+                    curr_insn_map,
+                    refund_addr(packet.target_address),
+                    &mut bus,
+                    &mut insn_count,
+                    );
+                    pc.set_addr(new_pc);
+                    bus.broadcast(Entry::event(
+                        EventKind::sync_end(pc.get_addr()),
+                        packet.timestamp,
+                    ));
+                    continue;
+                }
+                SyncType::SyncNone => {
+                    continue;
+                }
+            }
             break;
         } else if packet.f_header == FHeader::FTrap {
             // step until the trap's from_address (previous insn)

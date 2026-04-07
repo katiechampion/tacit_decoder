@@ -15,7 +15,7 @@ use crate::frontend::trap_type::*;
 pub enum SubFunc3 {
     None,
     TrapType(TrapType),
-    SyncType(SyncType), // unused for now
+    Sync(SyncType), // unused for now
 }
 
 #[derive(Debug, Clone)]
@@ -120,7 +120,7 @@ impl PacketReader {
                             sync_type != SyncType::SyncStart,
                             "SyncStart should not be observed other than in read_first_packet"
                         );
-                        packet.func3 = SubFunc3::SyncType(sync_type);
+                        packet.func3 = SubFunc3::Sync(sync_type);
                         let (from_prv, target_prv) = read_prv(&mut self.stream)?;
                         assert!(from_prv == Prv::PrvUser, "from_prv should be PrvUser");
                         packet.from_prv = from_prv;
@@ -128,7 +128,8 @@ impl PacketReader {
                         let (target_ctx, count) = read_varint(&mut self.stream)?;
                         packet.target_ctx = target_ctx;
                         bytes_read += count;
-                        let _ = read_u8(&mut self.stream)?;
+                        let runtime_cfg_byte = read_u8(&mut self.stream)?;
+                        packet.from_address = runtime_cfg_byte as u64;
                         bytes_read += 1;
                         let (target_address, count) = read_varint(&mut self.stream)?;
                         packet.target_address = target_address;
@@ -241,9 +242,9 @@ pub fn read_first_packet(stream: &mut BufReader<File>) -> Result<(Packet, Decode
     packet.is_compressed = false;
     packet.c_header = c_header;
     packet.f_header = f_header;
-    packet.func3 = SubFunc3::SyncType(sync_type);
+    packet.func3 = SubFunc3::Sync(sync_type);
     assert!(
-        packet.func3 == SubFunc3::SyncType(SyncType::SyncStart),
+        packet.func3 == SubFunc3::Sync(SyncType::SyncStart),
         "func3 should be SyncStart"
     );
 
